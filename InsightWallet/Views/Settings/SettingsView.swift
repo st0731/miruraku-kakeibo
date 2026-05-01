@@ -67,7 +67,7 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(.primary)
 
-                    Link(destination: URL(string: "https://docs.google.com/forms/PLACEHOLDER")!) {
+                    Link(destination: URL(string: "https://docs.google.com/forms/d/e/1FAIpQLSe3rI8B4OfYUH44n2T97RHnE2gz6DBmZ2rz1xCuIXrL7zJ0zw/viewform?usp=publish-editor")!) {
                         Label("お問い合わせ", systemImage: "envelope")
                     }
                     .foregroundStyle(.primary)
