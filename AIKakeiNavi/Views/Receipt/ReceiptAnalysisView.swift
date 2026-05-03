@@ -6,6 +6,7 @@ import Vision
 struct ReceiptAnalysisView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var aiManager = AIServiceManager.shared
     @State private var isIncome = false
 
     @State private var selectedItems: [PhotosPickerItem] = []
@@ -163,7 +164,7 @@ struct ReceiptAnalysisView: View {
 
                 VStack(spacing: 12) {
                     if !isIncome {
-                        if AIServiceManager.shared.hasDownloadedModel {
+                        if aiManager.hasDownloadedModel {
                             Menu {
                                 Button { showCamera = true } label: {
                                     Label("カメラで撮影", systemImage: "camera")
