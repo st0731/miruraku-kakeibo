@@ -2,7 +2,6 @@ import SwiftUI
 import PhotosUI
 import SwiftData
 import Vision
-import VisionKit
 
 struct ReceiptAnalysisView: View {
     @Environment(\.modelContext) private var modelContext
@@ -17,7 +16,6 @@ struct ReceiptAnalysisView: View {
     @State private var showDownloadSheet = false
     @State private var showPhotosPicker = false
     @State private var showCamera = false
-    @State private var showInputSourceDialog = false
     @State private var cameraImage: UIImage? = nil
     @State private var isSaving = false
     @State private var showProcessingError = false
@@ -34,6 +32,8 @@ struct ReceiptAnalysisView: View {
     @State private var editCategory = "食費"
     @State private var editTotal: Int? = nil
     @State private var editPayment = "現金"
+    @State private var isWarikan = false
+    @State private var warikanCount: Int = 2
     @State private var selectedImage: UIImage? = nil
     @State private var showFullScreenImage = false
 
@@ -41,6 +41,11 @@ struct ReceiptAnalysisView: View {
     static let necessityOptions = ["必要", "便利", "贅沢"]
     static let categoryOptions = ["食費", "服・美容費", "日用品・雑貨費", "交通・移動費", "通信費", "水道光熱費", "住居費", "医療・健康費", "趣味・娯楽費", "交際費", "サブスク費", "勉強費", "その他"]
     static let paymentMethods = ["現金", "クレジットカード", "QRコード決済", "電子マネー", "その他"]
+
+    private var warikanAmount: Int? {
+        guard let total = editTotal, isWarikan, warikanCount >= 2 else { return nil }
+        return total / warikanCount
+    }
 
     static let jpLocale = Locale(identifier: "ja_JP")
     static let numberFormat = IntegerFormatStyle<Int>.number
@@ -114,6 +119,34 @@ struct ReceiptAnalysisView: View {
                             customMenuPicker(label: "曜日", selection: $editWeekday, options: Self.weekdays)
                             customMenuPicker(label: "必要度", selection: $editNecessity, options: Self.necessityOptions)
                             customMenuPicker(label: "カテゴリ", selection: $editCategory, options: Self.categoryOptions)
+                            Toggle(isOn: $isWarikan) {
+                                labelWithTapDismiss("割り勘")
+                            }
+                            .onChange(of: isWarikan) { _, _ in isInputActive = false }
+
+                            if isWarikan {
+                                Stepper(value: $warikanCount, in: 2...20) {
+                                    HStack {
+                                        labelWithTapDismiss("人数")
+                                        Spacer()
+                                        Text("\(warikanCount)人")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                LabeledContent {
+                                    if let amount = warikanAmount {
+                                        Text("\(amount)円")
+                                            .foregroundStyle(.blue).bold()
+                                    } else {
+                                        Text("金額を入力してください")
+                                            .foregroundStyle(.secondary).font(.caption)
+                                    }
+                                } label: {
+                                    labelWithTapDismiss("一人あたり")
+                                }
+                            }
+
                             customMenuPicker(label: "支払い方法", selection: $editPayment, options: Self.paymentMethods)
                         }
                     } header: {
@@ -130,24 +163,34 @@ struct ReceiptAnalysisView: View {
 
                 VStack(spacing: 12) {
                     if !isIncome {
-                        Button(action: {
-                            if AIServiceManager.shared.hasDownloadedModel {
-                                showInputSourceDialog = true
-                            } else {
-                                showDownloadSheet = true
+                        if AIServiceManager.shared.hasDownloadedModel {
+                            Menu {
+                                Button { showCamera = true } label: {
+                                    Label("カメラで撮影", systemImage: "camera")
+                                }
+                                Button { showPhotosPicker = true } label: {
+                                    Label("フォトライブラリから選択", systemImage: "photo.on.rectangle")
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "sparkles")
+                                    Text("画像から自動入力")
+                                }
+                                .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                .background(Color.blue.opacity(0.1)).cornerRadius(12)
                             }
-                        }) {
-                            HStack {
-                                Image(systemName: AIServiceManager.shared.hasDownloadedModel ? "sparkles" : "lock.fill")
-                                Text("画像から自動入力")
-                                if !AIServiceManager.shared.hasDownloadedModel {
+                            .photosPicker(isPresented: $showPhotosPicker, selection: $selectedItems, maxSelectionCount: 1, matching: .images)
+                        } else {
+                            Button(action: { showDownloadSheet = true }) {
+                                HStack {
+                                    Image(systemName: "lock.fill")
+                                    Text("画像から自動入力")
                                     Text("(要ダウンロード)").font(.caption2)
                                 }
+                                .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                .background(Color.blue.opacity(0.1)).cornerRadius(12)
                             }
-                            .frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(Color.blue.opacity(0.1)).cornerRadius(12)
                         }
-                        .photosPicker(isPresented: $showPhotosPicker, selection: $selectedItems, maxSelectionCount: 1, matching: .images)
                     }
 
                     if let image = selectedImage {
@@ -222,12 +265,8 @@ struct ReceiptAnalysisView: View {
                     processingTask = nil
                 }
             }
-            .confirmationDialog("画像の選択方法", isPresented: $showInputSourceDialog) {
-                Button("カメラで撮影") { showCamera = true }
-                Button("フォトライブラリから選択") { showPhotosPicker = true }
-            }
             .fullScreenCover(isPresented: $showCamera) {
-                DocumentCameraView(image: $cameraImage)
+                CameraPickerView(image: $cameraImage)
             }
             .onChange(of: cameraImage) { _, newImage in
                 guard let img = newImage else { return }
@@ -276,7 +315,7 @@ struct ReceiptAnalysisView: View {
             weekday: isIncome ? "" : editWeekday,
             necessity: isIncome ? "" : editNecessity,
             category: isIncome ? "" : editCategory,
-            total: editTotal ?? 0,
+            total: isWarikan ? (warikanAmount ?? editTotal ?? 0) : (editTotal ?? 0),
             paymentMethod: isIncome ? "未設定" : editPayment
         )
         modelContext.insert(newRecord)
@@ -353,6 +392,8 @@ struct ReceiptAnalysisView: View {
         editDate = Date()
         selectedImage = nil
         isInputActive = false
+        isWarikan = false
+        warikanCount = 2
     }
 
     private func weekdayString(from date: Date) -> String {
@@ -373,39 +414,36 @@ struct ReceiptAnalysisView: View {
     }
 }
 
-// MARK: - DocumentCameraView
+// MARK: - CameraPickerView
 
-struct DocumentCameraView: UIViewControllerRepresentable {
+struct CameraPickerView: UIViewControllerRepresentable {
     @Binding var image: UIImage?
     @Environment(\.dismiss) private var dismiss
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
-        let scanner = VNDocumentCameraViewController()
-        scanner.delegate = context.coordinator
-        return scanner
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
     }
 
-    func updateUIViewController(_ uiViewController: VNDocumentCameraViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
-    class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
-        let parent: DocumentCameraView
-        init(_ parent: DocumentCameraView) { self.parent = parent }
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraPickerView
+        init(_ parent: CameraPickerView) { self.parent = parent }
 
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController,
-                                          didFinishWith scan: VNDocumentCameraScan) {
-            guard scan.pageCount > 0 else { parent.dismiss(); return }
-            parent.image = scan.imageOfPage(at: 0)
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let img = info[.originalImage] as? UIImage {
+                parent.image = img
+            }
             parent.dismiss()
         }
 
-        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            parent.dismiss()
-        }
-
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController,
-                                          didFailWithError error: Error) {
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
         }
     }
