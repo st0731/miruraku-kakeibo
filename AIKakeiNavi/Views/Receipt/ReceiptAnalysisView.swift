@@ -35,6 +35,7 @@ struct ReceiptAnalysisView: View {
     @State private var editPayment = "現金"
     @State private var isWarikan = false
     @State private var warikanCount: Int = 2
+    @State private var editWarikanAmount: Int? = nil
     @State private var selectedImage: UIImage? = nil
     @State private var showFullScreenImage = false
 
@@ -101,6 +102,11 @@ struct ReceiptAnalysisView: View {
                                         .keyboardType(.numberPad)
                                         .multilineTextAlignment(.trailing)
                                         .focused($isInputActive)
+                                        .onChange(of: editTotal) { _, newTotal in
+                                            if isWarikan, let total = newTotal {
+                                                editWarikanAmount = total / warikanCount
+                                            }
+                                        }
                                     Text("円")
                                 }
                             } label: {
@@ -123,7 +129,10 @@ struct ReceiptAnalysisView: View {
                             Toggle(isOn: $isWarikan) {
                                 labelWithTapDismiss("割り勘")
                             }
-                            .onChange(of: isWarikan) { _, _ in isInputActive = false }
+                            .onChange(of: isWarikan) { _, newValue in
+                                isInputActive = false
+                                if newValue { editWarikanAmount = warikanAmount }
+                            }
 
                             if isWarikan {
                                 Stepper(value: $warikanCount, in: 2...20) {
@@ -134,14 +143,16 @@ struct ReceiptAnalysisView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                 }
+                                .onChange(of: warikanCount) { _, _ in editWarikanAmount = warikanAmount }
 
                                 LabeledContent {
-                                    if let amount = warikanAmount {
-                                        Text("\(amount)円")
-                                            .foregroundStyle(.blue).bold()
-                                    } else {
-                                        Text("金額を入力してください")
-                                            .foregroundStyle(.secondary).font(.caption)
+                                    HStack {
+                                        TextField("0", value: $editWarikanAmount, format: Self.numberFormat)
+                                            .keyboardType(.numberPad)
+                                            .multilineTextAlignment(.trailing)
+                                            .foregroundStyle(.blue)
+                                            .focused($isInputActive)
+                                        Text("円")
                                     }
                                 } label: {
                                     labelWithTapDismiss("一人あたり")
@@ -316,7 +327,7 @@ struct ReceiptAnalysisView: View {
             weekday: isIncome ? "" : editWeekday,
             necessity: isIncome ? "" : editNecessity,
             category: isIncome ? "" : editCategory,
-            total: isWarikan ? (warikanAmount ?? editTotal ?? 0) : (editTotal ?? 0),
+            total: isWarikan ? (editWarikanAmount ?? editTotal ?? 0) : (editTotal ?? 0),
             paymentMethod: isIncome ? "未設定" : editPayment
         )
         modelContext.insert(newRecord)
@@ -395,6 +406,7 @@ struct ReceiptAnalysisView: View {
         isInputActive = false
         isWarikan = false
         warikanCount = 2
+        editWarikanAmount = nil
     }
 
     private func weekdayString(from date: Date) -> String {
