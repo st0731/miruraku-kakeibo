@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import SwiftData
 import Vision
+import VisionKit
 
 struct ReceiptAnalysisView: View {
     @Environment(\.modelContext) private var modelContext
